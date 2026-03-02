@@ -55,7 +55,8 @@ def fetch_data(conn):
             debt_asset,
             debt_to_cover, 
             status, 
-            gas_used, 
+            gas_used_units, 
+            gas_cost_eth,
             competitor_attempts,
             net_profit_usd,
             quoted_slippage_bps,
@@ -89,7 +90,7 @@ try:
         col1.metric("Total Tracked", total_tracked)
         col2.metric("Total Enriched", total_enriched)
         
-        avg_gas = df['gas_used'].mean() if not df['gas_used'].isna().all() else 0
+        avg_gas = df['gas_cost_eth'].mean() if 'gas_cost_eth' in df and not df['gas_cost_eth'].isna().all() else 0
         col3.metric("Avg Gas Cost (ETH)", f"{avg_gas:.6f}")
         
         # Calculate raw overall profit
@@ -153,7 +154,7 @@ try:
             display_df['debt_asset'] = display_df['debt_asset'].apply(get_symbol)
             # Reorder columns slightly for better reading
             cols = list(display_df.columns)
-            display_df = display_df[['id', 'tx_hash', 'timestamp', 'collateral_asset', 'debt_asset', 'debt_to_cover', 'status', 'gas_used', 'competitor_attempts', 'quoted_slippage_bps', 'splash_pct', 'rebound_50_pct', 'net_profit_usd', 'scavenger_profit_usd']]
+            display_df = display_df[['id', 'tx_hash', 'timestamp', 'collateral_asset', 'debt_asset', 'debt_to_cover', 'status', 'gas_cost_eth', 'competitor_attempts', 'quoted_slippage_bps', 'splash_pct', 'rebound_50_pct', 'net_profit_usd', 'scavenger_profit_usd']]
 
         # Format slippage as percentage (allow negative slippage, which is profitable)
         if 'quoted_slippage_bps' in display_df:

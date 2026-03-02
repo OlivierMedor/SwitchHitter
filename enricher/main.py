@@ -25,6 +25,21 @@ AAVE_V3_POOL_ADDRESS = "0x794a61358D6845594F94dc1DB02A252b5b4814aD".lower()
 # The first 4 bytes (8 hex characters) of the liquidationCall(address,address,address,uint256,bool) signature
 LIQUIDATE_SIG = "0x00a718a9"
 
+LIQUIDATE_ABI = [{
+    "inputs": [
+        {"internalType": "address", "name": "collateralAsset", "type": "address"},
+        {"internalType": "address", "name": "debtAsset", "type": "address"},
+        {"internalType": "address", "name": "user", "type": "address"},
+        {"internalType": "uint256", "name": "debtToCover", "type": "uint256"},
+        {"internalType": "bool", "name": "receiveAToken", "type": "bool"}
+    ],
+    "name": "liquidationCall",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+}]
+
+
 def get_db_connection():
     return psycopg2.connect(
         host=DB_HOST,
@@ -61,7 +76,7 @@ def enrich_liquidation(conn, w3, row_id, tx_hash, block_number, user_address):
         block = w3.eth.get_block(block_number, full_transactions=True)
         
         competitor_attempts = 0
-        user_address_stripped = user_address.lower().replace("0x", "")
+        aave_contract = w3.eth.contract(address=Web3.to_checksum_address(AAVE_V3_POOL_ADDRESS), abi=LIQUIDATE_ABI)
 
         for tx in block['transactions']:
             # Skip the winning transaction itself
@@ -76,19 +91,28 @@ def enrich_liquidation(conn, w3, row_id, tx_hash, block_number, user_address):
             tx_input = tx['input'].hex() if isinstance(tx['input'], bytes) else tx['input']
             
             # Check if it was a liquidationCall and if the payload contained the user address
-            if tx_input.startswith(LIQUIDATE_SIG) and user_address_stripped in tx_input.lower():
-                competitor_attempts += 1
+            if tx_input.startswith(LIQUIDATE_SIG):
+                try:
+                    func_obj, func_params = aave_contract.decode_function_input(tx_input)
+                    if func_params.get('user', '').lower() == user_address.lower():
+                        competitor_attempts += 1
+                except Exception:
+                    # Fallback to simple substring match if ABI decoding fails due to malformed input
+                    user_address_stripped = user_address.lower().replace("0x", "")
+                    if user_address_stripped in tx_input.lower():
+                        competitor_attempts += 1
 
         # 3. Update the database record
         with conn.cursor() as cur:
             cur.execute("""
                 UPDATE liquidations 
-                SET gas_used = %s, 
+                SET gas_used_units = %s, 
+                    gas_cost_eth = %s, 
                     competitor_attempts = %s, 
                     status = 'enriched',
                     updated_at = NOW()
                 WHERE id = %s;
-            """, (gas_cost_eth, competitor_attempts, row_id))
+            """, (gas_used, gas_cost_eth, competitor_attempts, row_id))
             conn.commit()
             
         logger.info(f"Enriched ID {row_id} | Gas: {gas_cost_eth:.6f} ETH | Competitors: {competitor_attempts}")

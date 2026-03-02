@@ -51,10 +51,11 @@ def fetch_historical_price(token_address, timestamp):
     
     try:
         response = requests.get(url, timeout=10)
-        # Fallback to current price if historical API crashes (e.g. simulator timestamps from 2026)
+        
+        # Strict enforcement: Do not fallback to current price in backtesting mode!
         if response.status_code != 200 or 'application/json' not in response.headers.get('content-type', '').lower():
-            current_url = f"https://coins.llama.fi/prices/current/{llama_id}"
-            response = requests.get(current_url, timeout=10)
+            print(f"[-] Warning: API failed to return historical price for {llama_id} at {timestamp}")
+            return None
             
         data = response.json()
         
@@ -81,7 +82,7 @@ def main():
             debt_asset, 
             debt_to_cover, 
             liquidated_collateral_amount,
-            gas_used,
+            gas_cost_eth,
             competitor_attempts,
             quoted_slippage_bps
         FROM liquidations
@@ -122,7 +123,7 @@ def main():
         # Use exact decimals instead of universally defaulting to 1e18
         collateral_amt = float(row['liquidated_collateral_amount']) / (10 ** get_decimals(row['collateral_asset']))
         debt_amt = float(row['debt_to_cover']) / (10 ** get_decimals(row['debt_asset']))
-        gas_amt_eth = float(row['gas_used'])
+        gas_amt_eth = float(row['gas_cost_eth'])
         
         # 3. Value calculations in USD
         gross_revenue_usd = collateral_amt * col_price

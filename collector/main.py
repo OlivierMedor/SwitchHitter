@@ -122,6 +122,7 @@ def process_logs(conn, w3, logs):
         
         # The args dictionary holds the decoded values
         args = log['args']
+        log_index = log['logIndex']
         collateral_asset = args['collateralAsset']
         debt_asset = args['debtAsset']
         user_address = args['user']
@@ -131,6 +132,7 @@ def process_logs(conn, w3, logs):
         
         records.append((
             tx_hash,
+            log_index,
             block_number,
             timestamp,
             collateral_asset,
@@ -144,10 +146,10 @@ def process_logs(conn, w3, logs):
         
     insert_query = """
         INSERT INTO liquidations (
-            tx_hash, block_number, timestamp, collateral_asset, debt_asset, 
+            tx_hash, log_index, block_number, timestamp, collateral_asset, debt_asset, 
             user_address, liquidator_address, debt_to_cover, liquidated_collateral_amount, status
         ) VALUES %s
-        ON CONFLICT (tx_hash) DO NOTHING;
+        ON CONFLICT (tx_hash, log_index) DO NOTHING;
     """
     
     with conn.cursor() as cur:

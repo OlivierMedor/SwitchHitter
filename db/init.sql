@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS liquidations (
     id SERIAL PRIMARY KEY,
-    tx_hash VARCHAR(66) UNIQUE NOT NULL,
+    tx_hash VARCHAR(66) NOT NULL,
+    log_index BIGINT NOT NULL,
     block_number BIGINT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
     collateral_asset VARCHAR(42) NOT NULL,
@@ -10,7 +11,8 @@ CREATE TABLE IF NOT EXISTS liquidations (
     debt_to_cover NUMERIC NOT NULL,
     liquidated_collateral_amount NUMERIC NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'raw',
-    gas_used NUMERIC,
+    gas_used_units BIGINT,
+    gas_cost_eth DECIMAL,
     competitor_attempts INTEGER,
     net_profit_usd DECIMAL,
     quoted_slippage_bps DECIMAL,
@@ -22,7 +24,8 @@ CREATE TABLE IF NOT EXISTS liquidations (
     scavenger_revenue_usd DECIMAL,
     scavenger_profit_usd DECIMAL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(tx_hash, log_index)
 );
 
 -- Index for querying raw liquidations effectively in the Enricher
