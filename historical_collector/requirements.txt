@@ -1,0 +1,4 @@
+requests==2.31.0
+psycopg2-binary
+python-dotenv==1.0.1
+web3==6.15.1

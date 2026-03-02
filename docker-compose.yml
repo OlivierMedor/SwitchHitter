@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: switchhitter-db
+    restart: always
+    environment:
+      POSTGRES_USER: switchhitter
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: switchhitter
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  ### Microservices Placeholders (M1, M2, M3) 
+  # These will be enabled as we build them out in their respective milestones.
+
+  collector:
+    build:
+      context: .
+      dockerfile: collector/Dockerfile
+    container_name: switchhitter-collector
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_USER=switchhitter
+      - DB_PASSWORD=secretpassword
+      - DB_NAME=switchhitter
+      - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL}
+
+  enricher:
+    build:
+      context: .
+      dockerfile: enricher/Dockerfile
+    container_name: switchhitter-enricher
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_USER=switchhitter
+      - DB_PASSWORD=secretpassword
+      - DB_NAME=switchhitter
+      - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL}
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    container_name: switchhitter-dashboard
+    depends_on:
+      - db
+    ports:
+      - "8501:8501"
+    environment:
+      - DB_HOST=db
+      - DB_USER=switchhitter
+      - DB_PASSWORD=secretpassword
+      - DB_NAME=switchhitter
+
+volumes:
+  db_data:
