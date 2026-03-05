@@ -17,12 +17,6 @@ CREATE TABLE IF NOT EXISTS liquidations (
     net_profit_usd DECIMAL,
     quoted_slippage_bps DECIMAL,
     quoted_swap_output VARCHAR(100),
-    price_block_before DECIMAL,
-    price_block_after DECIMAL,
-    price_block_plus_10 DECIMAL,
-    price_block_plus_50 DECIMAL,
-    scavenger_revenue_usd DECIMAL,
-    scavenger_profit_usd DECIMAL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(tx_hash, log_index)
@@ -34,6 +28,29 @@ CREATE INDEX idx_liquidations_status ON liquidations(status);
 -- Index for faster block and time based queries
 CREATE INDEX idx_liquidations_block_number ON liquidations(block_number);
 CREATE INDEX idx_liquidations_timestamp ON liquidations(timestamp);
+
+-- --- V2 EXECUTION LOG ---
+-- Tracks every liquidation attempt made by our Rust bot in production
+CREATE TABLE IF NOT EXISTS bot_executions (
+    id SERIAL PRIMARY KEY,
+    attempted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    target_user VARCHAR(42) NOT NULL,
+    protocol VARCHAR(20) NOT NULL DEFAULT 'aave_v3',
+    debt_asset VARCHAR(42) NOT NULL,
+    collateral_asset VARCHAR(42) NOT NULL,
+    flashloan_provider VARCHAR(20) NOT NULL,  -- 'balancer' or 'aave'
+    health_factor_at_trigger DECIMAL,
+    expected_profit_usd DECIMAL,
+    actual_profit_usd DECIMAL,
+    gas_cost_eth DECIMAL,
+    tx_hash VARCHAR(66),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending, success, failed, beaten
+    wallet_used VARCHAR(42),
+    error_message TEXT
+);
+
+CREATE INDEX idx_bot_executions_attempted_at ON bot_executions(attempted_at);
+CREATE INDEX idx_bot_executions_status ON bot_executions(status);
 
 -- Trigger to automatically update updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()

@@ -4,7 +4,6 @@ import psycopg2
 import streamlit as st
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -13,17 +12,14 @@ DB_USER = os.getenv("DB_USER", "switchhitter")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "secretpassword")
 DB_NAME = os.getenv("DB_NAME", "switchhitter")
 
-# Setup page config
-st.set_page_config(page_title="Switch-Hitter MEV Dashboard", layout="wide")
+st.set_page_config(page_title="Switch-Hitter V2 | MEV Bot", layout="wide", page_icon="🥷")
 
-# Known Arbitrum Token Symbols
 TOKEN_MAP = {
     "0x82af49447d8a07e3bd95bd0d56f35241523fbab1": "WETH",
     "0xaf88d065e77c8cc2239327c5edb3a432268e5831": "USDC",
     "0xff970a61a04b1ca14834a43f5de4533ebddb5cc8": "USDC.e",
     "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9": "USDT",
     "0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f": "WBTC",
-    "0xd8a4fdf445217bd4f877ce3df6ddb49bee04aeba": "EURS",
     "0x912ce59144191c1204e64559fe8253a0e49e6548": "ARB",
     "0xf97f4df75154ae9c2e411b439c28fb3590cceba9": "LINK",
     "0xda10009cbd5d07dd0cecc66161fc93d7c9000da1": "DAI",
@@ -31,176 +27,182 @@ TOKEN_MAP = {
     "0xec70dcb4a1efa46b8f2d97c310c9c4790ba5ffa8": "rETH"
 }
 
+PROTOCOL_MAP = {
+    "aave_v3": "Aave V3",
+    "radiant": "Radiant",
+    "compound": "Compound V3",
+    "silo": "Silo"
+}
+
 def get_symbol(address):
     if not address: return "UNKNOWN"
-    return TOKEN_MAP.get(address.lower(), address[:6]+"..")
+    return TOKEN_MAP.get(address.lower(), address[:8] + "..")
 
 def init_connection():
     return psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME
+        host=DB_HOST, port=DB_PORT,
+        user=DB_USER, password=DB_PASSWORD, database=DB_NAME
     )
 
-def fetch_data(conn):
+def fetch_historical_liquidations(conn):
     query = """
-        SELECT 
-            id, 
-            tx_hash, 
-            block_number, 
-            timestamp, 
-            collateral_asset,
-            debt_asset,
-            debt_to_cover, 
-            status, 
-            gas_used_units, 
-            gas_cost_eth,
-            competitor_attempts,
-            net_profit_usd,
-            quoted_slippage_bps,
-            price_block_before,
-            price_block_after,
-            price_block_plus_10,
-            price_block_plus_50,
-            scavenger_revenue_usd,
-            scavenger_profit_usd
+        SELECT id, tx_hash, timestamp, collateral_asset, debt_asset,
+               debt_to_cover, status, gas_cost_eth, competitor_attempts,
+               net_profit_usd, quoted_slippage_bps
         FROM liquidations
-        ORDER BY timestamp DESC;
+        ORDER BY timestamp DESC
+        LIMIT 500;
     """
-    df = pd.read_sql(query, conn)
-    return df
+    return pd.read_sql(query, conn)
 
-st.title("🥷 Switch-Hitter | MEV Radar")
-st.markdown("Real-time tracker for Arbitrum Aave V3 Liquidation Calls and Profit Margins.")
+def fetch_bot_executions(conn):
+    query = """
+        SELECT attempted_at, target_user, protocol, debt_asset, collateral_asset,
+               flashloan_provider, health_factor_at_trigger, expected_profit_usd,
+               actual_profit_usd, gas_cost_eth, status, wallet_used, tx_hash
+        FROM bot_executions
+        ORDER BY attempted_at DESC
+        LIMIT 200;
+    """
+    return pd.read_sql(query, conn)
+
+# ──────────────────────────────────────────────────────────
+# HEADER
+# ──────────────────────────────────────────────────────────
+st.title("🥷 Switch-Hitter V2 | MEV Liquidation Bot")
+st.markdown("*Arbitrum Multi-Protocol Liquidation Sniper — Aave V3 · Radiant · Compound · Silo*")
+st.divider()
 
 conn = init_connection()
 
 try:
-    df = fetch_data(conn)
-    
-    if df.empty:
-        st.info("No liquidations tracked yet. The Collector may still be syncing...")
-    else:
-        total_tracked = len(df)
-        total_enriched = len(df[df['status'] == 'enriched'])
-        
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
-        col1.metric("Total Tracked", total_tracked)
-        col2.metric("Total Enriched", total_enriched)
-        
-        avg_gas = df['gas_cost_eth'].mean() if 'gas_cost_eth' in df and not df['gas_cost_eth'].isna().all() else 0
-        col3.metric("Avg Gas Cost (ETH)", f"{avg_gas:.6f}")
-        
-        # Calculate raw overall profit
-        total_profit = df['net_profit_usd'].sum() if 'net_profit_usd' in df and not df['net_profit_usd'].isna().all() else 0
-        col4.metric("Raw Overall Profit", f"${total_profit:.2f}")
-        
-        # Filtered profit (only taking winning trades)
-        profitable_mask = df['net_profit_usd'] > 0
-        filtered_profit = df.loc[profitable_mask, 'net_profit_usd'].sum() if 'net_profit_usd' in df else 0
-        col5.metric("Filtered Profit (Winners)", f"${filtered_profit:.2f}")
-        
-        # Avg real slippage (only for profitable trades we'd actually take)
-        quoted = df.loc[profitable_mask, 'quoted_slippage_bps'].dropna()
-        quoted = quoted[quoted >= 0]
-        avg_slip = quoted.mean() / 100 if len(quoted) > 0 else None
-        col6.metric("Avg Slippage (Winners)", f"{avg_slip:.3f}%" if avg_slip is not None else "Pending")
-        
-        if not df['timestamp'].isna().all():
-            min_date = df['timestamp'].min().strftime('%b %d, %Y %H:%M')
-            max_date = df['timestamp'].max().strftime('%b %d, %Y %H:%M')
-            st.markdown(f"**🗓 Tracking Period:** {min_date} to {max_date} UTC")
-        
-        st.subheader("Recent Liquidations")
-        
-        # Format the dataframe for better display
-        display_df = df.copy()
-        
-        # Format the timestamp
-        display_df['timestamp'] = pd.to_datetime(display_df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-        
-        # Calculate Splash and Rebound
-        if 'price_block_before' in df and 'price_block_after' in df and 'price_block_plus_50' in df:
-            # Splash: (After - Before) / Before
-            display_df['splash_pct'] = display_df.apply(
-                lambda row: ((row['price_block_after'] - row['price_block_before']) / row['price_block_before'] * 100) 
-                            if pd.notnull(row['price_block_before']) and row['price_block_before'] > 0 else None, 
-                axis=1
-            )
-            # Rebound: (Plus_50 - After) / After
-            display_df['rebound_50_pct'] = display_df.apply(
-                lambda row: ((row['price_block_plus_50'] - row['price_block_after']) / row['price_block_after'] * 100) 
-                            if pd.notnull(row['price_block_after']) and pd.notnull(row['price_block_plus_50']) and row['price_block_after'] > 0 else None, 
-                axis=1
-            )
-            
-            # Format Splash 
-            display_df['splash_pct'] = display_df['splash_pct'].apply(
-                lambda x: f"{float(x):+.2f}%" if pd.notnull(x) else "-"
-            )
-            # Format Rebound
-            display_df['rebound_50_pct'] = display_df['rebound_50_pct'].apply(
-                lambda x: f"{float(x):+.2f}%" if pd.notnull(x) else "-"
-            )
+    # ──────────────────────────────────────────────────────
+    # TAB LAYOUT
+    # ──────────────────────────────────────────────────────
+    tab1, tab2 = st.tabs(["📡 Live Bot Performance", "📜 Historical Liquidation Radar"])
+
+    # ──────────────────────────────────────────────────────
+    # TAB 1: LIVE BOT PERFORMANCE (V2 Execution Engine)
+    # ──────────────────────────────────────────────────────
+    with tab1:
+        st.subheader("🤖 Execution Engine Status")
+
+        try:
+            exec_df = fetch_bot_executions(conn)
+
+            if exec_df.empty:
+                st.info("🟡 Rust Execution Engine is not yet live. No bot executions recorded.")
+                st.markdown("""
+                **Engine Status:** Building Phase (M20-M24)
+
+                The V2 Rust Execution Engine is currently under active development.
+                Once deployed, this tab will display:
+                - Live execution attempts and results per protocol
+                - Wallet fleet performance and balances
+                - Win/loss rate against competing bots
+                - Gas efficiency and flashloan provider breakdown
+                """)
+            else:
+                total_attempts = len(exec_df)
+                wins = len(exec_df[exec_df['status'] == 'success'])
+                losses = len(exec_df[exec_df['status'] == 'failed'])
+                beaten = len(exec_df[exec_df['status'] == 'beaten'])
+                win_rate = (wins / total_attempts * 100) if total_attempts > 0 else 0
+
+                total_profit = exec_df['actual_profit_usd'].sum() if not exec_df['actual_profit_usd'].isna().all() else 0
+                total_gas = exec_df['gas_cost_eth'].sum() if not exec_df['gas_cost_eth'].isna().all() else 0
+
+                c1, c2, c3, c4, c5 = st.columns(5)
+                c1.metric("Total Attempts", total_attempts)
+                c2.metric("✅ Wins", wins, f"{win_rate:.1f}% rate")
+                c3.metric("❌ Beaten by Competitor", beaten)
+                c4.metric("Net Profit (USD)", f"${total_profit:,.2f}")
+                c5.metric("Total Gas Spent (ETH)", f"{total_gas:.5f}")
+
+                st.divider()
+                st.subheader("Execution Log")
+
+                display = exec_df.copy()
+                display['debt_asset'] = display['debt_asset'].apply(get_symbol)
+                display['collateral_asset'] = display['collateral_asset'].apply(get_symbol)
+                display['protocol'] = display['protocol'].map(PROTOCOL_MAP).fillna(display['protocol'])
+                display['actual_profit_usd'] = display['actual_profit_usd'].apply(
+                    lambda x: f"${x:,.2f}" if pd.notnull(x) else "-"
+                )
+
+                def color_status(val):
+                    colors = {'success': 'green', 'beaten': 'orange', 'failed': 'red', 'pending': 'gray'}
+                    return f"color: {colors.get(val, 'white')}"
+
+                st.dataframe(
+                    display.style.map(color_status, subset=['status']),
+                    use_container_width=True, hide_index=True
+                )
+
+        except Exception as e:
+            st.warning(f"bot_executions table not yet created. Run `docker-compose up` with the new schema to activate. ({e})")
+
+    # ──────────────────────────────────────────────────────
+    # TAB 2: HISTORICAL RADAR (Phase 1 Data - Reference Only)
+    # ──────────────────────────────────────────────────────
+    with tab2:
+        st.subheader("📜 Historical Aave V3 Liquidation Radar")
+        st.caption("Phase 1 historical data — used for backtesting and opportunity analysis. This is NOT live bot execution data.")
+
+        hist_df = fetch_historical_liquidations(conn)
+
+        if hist_df.empty:
+            st.info("No historical liquidations tracked yet.")
         else:
-            display_df['splash_pct'] = "-"
-            display_df['rebound_50_pct'] = "-"
+            total = len(hist_df)
+            enriched = len(hist_df[hist_df['status'] == 'enriched'])
+            total_profit = hist_df['net_profit_usd'].sum() if not hist_df['net_profit_usd'].isna().all() else 0
+            winning = hist_df[hist_df['net_profit_usd'] > 0]
+            win_profit = winning['net_profit_usd'].sum() if not winning.empty else 0
+            avg_gas = hist_df['gas_cost_eth'].mean() if not hist_df['gas_cost_eth'].isna().all() else 0
+            avg_slip = hist_df.loc[hist_df['net_profit_usd'] > 0, 'quoted_slippage_bps'].dropna()
+            avg_slip = avg_slip[avg_slip >= 0].mean() / 100 if len(avg_slip) > 0 else None
 
-        # Map addresses to human readable symbols
-        if 'collateral_asset' in display_df and 'debt_asset' in display_df:
-            display_df['collateral_asset'] = display_df['collateral_asset'].apply(get_symbol)
-            display_df['debt_asset'] = display_df['debt_asset'].apply(get_symbol)
-            # Reorder columns slightly for better reading
-            cols = list(display_df.columns)
-            display_df = display_df[['id', 'tx_hash', 'timestamp', 'collateral_asset', 'debt_asset', 'debt_to_cover', 'status', 'gas_cost_eth', 'competitor_attempts', 'quoted_slippage_bps', 'splash_pct', 'rebound_50_pct', 'net_profit_usd', 'scavenger_profit_usd']]
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.metric("Total Tracked", total)
+            c2.metric("Enriched", enriched)
+            c3.metric("Gross Profit (Winners)", f"${win_profit:,.2f}")
+            c4.metric("Avg Gas (ETH)", f"{avg_gas:.6f}")
+            c5.metric("Avg Slippage (Winners)", f"{avg_slip:.3f}%" if avg_slip else "—")
 
-        # Format slippage as percentage (allow negative slippage, which is profitable)
-        if 'quoted_slippage_bps' in display_df:
-            display_df['quoted_slippage_bps'] = display_df['quoted_slippage_bps'].apply(
+            if not hist_df['timestamp'].isna().all():
+                min_d = pd.to_datetime(hist_df['timestamp']).min().strftime('%b %d, %Y')
+                max_d = pd.to_datetime(hist_df['timestamp']).max().strftime('%b %d, %Y')
+                st.caption(f"📅 Data range: {min_d} → {max_d}")
+
+            display = hist_df.copy()
+            display['timestamp'] = pd.to_datetime(display['timestamp']).dt.strftime('%Y-%m-%d %H:%M')
+            display['collateral_asset'] = display['collateral_asset'].apply(get_symbol)
+            display['debt_asset'] = display['debt_asset'].apply(get_symbol)
+            display['debt_to_cover'] = display['debt_to_cover'].apply(lambda x: f"{float(x):.2e}")
+            display['quoted_slippage_bps'] = display['quoted_slippage_bps'].apply(
                 lambda x: f"{float(x)/100:.3f}%" if pd.notnull(x) else "Pending"
             )
-        
-        # Convert very long wei values to raw string or abbreviated for the UI
-        display_df['debt_to_cover'] = display_df['debt_to_cover'].apply(lambda x: f"{float(x):.2e}")
-        
-        # Format profit as a clean dollar string
-        if 'net_profit_usd' in display_df:
-            def format_profit(val):
-                if pd.isna(val): return "Pending..."
-                if float(val) == 0: return "Unpriceable"
-                return f"${float(val):.2f}"
-            display_df['net_profit_usd'] = display_df['net_profit_usd'].apply(format_profit)
-            
-        # Format Scavenger Profit
-        if 'scavenger_profit_usd' in display_df:
-            display_df['scavenger_profit_usd'] = display_df['scavenger_profit_usd'].apply(
-                lambda x: f"${float(x):.2f}" if pd.notnull(x) else "-"
+            display['net_profit_usd'] = display['net_profit_usd'].apply(
+                lambda x: "Pending" if pd.isna(x) else ("$0 (Unpriceable)" if x == 0 else f"${x:,.2f}")
             )
-        
-        # Color code the status
-        def color_status(val):
-            color = 'green' if val == 'enriched' else 'orange'
-            return f'color: {color}'
-            
-        def color_profit(val):
-            if val == "Pending...":
-                return 'color: gray'
-            if val == "Unpriceable":
-                return 'color: gray; font-style: italic'
-            try:
-                val_float = float(val.replace('$', '').replace(',', ''))
-                color = 'green' if val_float > 0 else 'red'
-                return f'color: {color}'
-            except:
-                return ''
-            
-        st.dataframe(
-            display_df.style.map(color_status, subset=['status']).map(color_profit, subset=['net_profit_usd']),
-            use_container_width=True,
-            hide_index=True
-        )
-        
+
+            def color_status(val):
+                return 'color: green' if val == 'enriched' else 'color: orange'
+
+            def color_profit(val):
+                if "Pending" in str(val) or "Unpriceable" in str(val): return 'color: gray'
+                try:
+                    return 'color: green' if float(val.replace('$','').replace(',','')) > 0 else 'color: red'
+                except: return ''
+
+            st.dataframe(
+                display[['id','tx_hash','timestamp','collateral_asset','debt_asset','debt_to_cover',
+                          'status','gas_cost_eth','competitor_attempts','quoted_slippage_bps','net_profit_usd']]
+                .style.map(color_status, subset=['status']).map(color_profit, subset=['net_profit_usd']),
+                use_container_width=True, hide_index=True
+            )
+
 except Exception as e:
-    st.error(f"Error fetching data: {e}")
+    st.error(f"Database connection failed: {e}")
+    st.caption("Make sure Docker is running: `make up`")
