@@ -40,6 +40,9 @@ contract SwitchHitterV2 {
     IPool public constant aavePool = IPool(0x794a61358D6845594F94dc1DB02A252b5b4814aD);
     IBalancerVault public constant balancerVault = IBalancerVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
 
+    // Whitelisted DEX Aggregators
+    mapping(address => bool) public approvedAggregators;
+
     modifier onlyOwner() {
         require(msg.sender == owner, "Not owner");
         _;
@@ -47,6 +50,13 @@ contract SwitchHitterV2 {
 
     constructor() {
         owner = msg.sender;
+        // Whitelist 1inch v5 Router on Arbitrum by default
+        approvedAggregators[0x1111111254eb6c44bAC0beD2854e76F90643097d] = true;
+    }
+
+    // Allow owner to manage aggregators
+    function setAggregator(address aggregator, bool approved) external onlyOwner {
+        approvedAggregators[aggregator] = approved;
     }
 
     // --- MAIN ENTRY POINT ---
@@ -115,8 +125,11 @@ contract SwitchHitterV2 {
         
         _executeLiquidationAndSwap(tokens[0], amounts[0], userData);
         
-        // Approve Balancer to pull the repayment
-        IERC20(tokens[0]).approve(address(balancerVault), amountToRepay);
+        // Ensure profitability / enough to repay before transferring
+        require(IERC20(tokens[0]).balanceOf(address(this)) >= amountToRepay, "NOT_ENOUGH_TO_REPAY");
+
+        // Transfer Balancer repayment (Balancer requires pull via transfer, not approve)
+        IERC20(tokens[0]).transfer(address(balancerVault), amountToRepay);
     }
 
     // 2. Aave Callback
@@ -134,7 +147,11 @@ contract SwitchHitterV2 {
 
         _executeLiquidationAndSwap(asset, amount, params);
 
-        // Approve Aave to pull the repayment
+        // Ensure profitability / enough to repay before returning
+        require(IERC20(asset).balanceOf(address(this)) >= amountToRepay, "NOT_ENOUGH_TO_REPAY");
+
+        // Approve Aave to pull the repayment (Aave pulls via transferFrom)
+        IERC20(asset).approve(address(aavePool), 0);
         IERC20(asset).approve(address(aavePool), amountToRepay);
         return true;
     }
@@ -155,6 +172,7 @@ contract SwitchHitterV2 {
         ) = abi.decode(params, (address, address, address, uint256, address, bytes));
 
         // 1. Approve Aave to spend the debtAsset we just borrowed
+        IERC20(debtAsset).approve(address(aavePool), 0);
         IERC20(debtAsset).approve(address(aavePool), flashloanAmount);
 
         // 2. Execute the physical liquidation!
@@ -170,7 +188,10 @@ contract SwitchHitterV2 {
         uint256 seizedCollateral = IERC20(collateralAsset).balanceOf(address(this));
         require(seizedCollateral > 0, "Liquidation yielded zero collateral");
 
+        require(approvedAggregators[aggregatorTarget], "Aggregator not whitelisted");
+
         // 4. Approve the 1inch Router to take our seized collateral
+        IERC20(collateralAsset).approve(aggregatorTarget, 0);
         IERC20(collateralAsset).approve(aggregatorTarget, seizedCollateral);
 
         // 5. Execute the blind 1inch aggregator routing!
