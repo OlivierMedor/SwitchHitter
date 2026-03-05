@@ -120,9 +120,9 @@ def get_pool_price(w3, pool_contract, block_num, col_asset):
         
         # We want price of collateral in terms of debt
         col_asset_lower = col_asset.lower()
-        if col_asset_lower == token1:
+        if col_asset_lower == token0:
             return adjusted_price
-        elif col_asset_lower == token0:
+        elif col_asset_lower == token1:
             if adjusted_price == 0: return 0
             return 1 / adjusted_price
         else:

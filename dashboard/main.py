@@ -167,9 +167,11 @@ try:
         
         # Format profit as a clean dollar string
         if 'net_profit_usd' in display_df:
-            display_df['net_profit_usd'] = display_df['net_profit_usd'].apply(
-                lambda x: f"${float(x):.2f}" if pd.notnull(x) else "Pending..."
-            )
+            def format_profit(val):
+                if pd.isna(val): return "Pending..."
+                if float(val) == 0: return "Unpriceable"
+                return f"${float(val):.2f}"
+            display_df['net_profit_usd'] = display_df['net_profit_usd'].apply(format_profit)
             
         # Format Scavenger Profit
         if 'scavenger_profit_usd' in display_df:
@@ -185,6 +187,8 @@ try:
         def color_profit(val):
             if val == "Pending...":
                 return 'color: gray'
+            if val == "Unpriceable":
+                return 'color: gray; font-style: italic'
             try:
                 val_float = float(val.replace('$', '').replace(',', ''))
                 color = 'green' if val_float > 0 else 'red'

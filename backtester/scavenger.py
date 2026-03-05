@@ -110,7 +110,7 @@ def main():
         FROM liquidations
         WHERE status = 'enriched' 
           AND price_block_before > 0 
-          AND ((price_block_after - price_block_before) / price_block_before) < -0.01
+          AND ABS((price_block_after - price_block_before) / price_block_before) > 0.01
         ORDER BY timestamp DESC
         LIMIT 100;
     """)

@@ -97,6 +97,7 @@ def main():
                     args = log['args']
                     records_to_insert.append((
                         tx_hash,
+                        log['logIndex'],
                         log['blockNumber'],
                         timestamp,
                         args['collateralAsset'],
@@ -116,10 +117,10 @@ def main():
         if records_to_insert:
             insert_query = """
                 INSERT INTO liquidations (
-                    tx_hash, block_number, timestamp, collateral_asset, debt_asset, 
+                    tx_hash, log_index, block_number, timestamp, collateral_asset, debt_asset, 
                     user_address, liquidator_address, debt_to_cover, liquidated_collateral_amount, status
                 ) VALUES %s
-                ON CONFLICT (tx_hash) DO NOTHING;
+                ON CONFLICT (tx_hash, log_index) DO NOTHING;
             """
             try:
                 with conn.cursor() as cur:

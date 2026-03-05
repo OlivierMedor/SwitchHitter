@@ -21,12 +21,13 @@ Stores the historical `LiquidationCall` events emitted by the Aave v3 Pool contr
 | `debt_to_cover` | `NUMERIC` | Amount of debt covered (raw precision). |
 | `liquidated_collateral_amount` | `NUMERIC` | Amount of collateral liquidated (raw precision). |
 | `status` | `VARCHAR(20)` | Queue status: `'raw'` (from Collector) or `'enriched'` (from Enricher). |
-| `gas_used` | `NUMERIC` | [Enriched] Gas used by the transaction. |
+| `gas_used_units` | `BIGINT` | [Enriched] Raw gas units used by the transaction. |
+| `gas_cost_eth` | `DECIMAL` | [Enriched] Total gas cost in ETH (units * effective gas price). |
 | `competitor_attempts` | `INTEGER` | [Enriched] Number of failed/reverted transaction attempts targeting the same underwater position in the same block. |
 | `created_at` | `TIMESTAMP` | Record creation. |
 | `updated_at` | `TIMESTAMP` | Record last updated. |
 
 ## Workflow States
 1. **Collector** inserts a new row with `status = 'raw'`.
-2. **Enricher** queries for rows where `status = 'raw'`, performs on-chain block parsing to find `gas_used` and `competitor_attempts`, updates these fields, and sets `status = 'enriched'`.
+2. **Enricher** queries for rows where `status = 'raw'`, performs on-chain block parsing to find gas usage (`gas_used_units`, `gas_cost_eth`) and `competitor_attempts`, updates these fields, and sets `status = 'enriched'`.
 3. **Dashboard / Backtester** query only rows where `status = 'enriched'` for analysis.

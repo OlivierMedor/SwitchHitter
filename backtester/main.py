@@ -86,8 +86,8 @@ def main():
             competitor_attempts,
             quoted_slippage_bps
         FROM liquidations
-        WHERE status = 'enriched'
-        ORDER BY timestamp ASC;
+        WHERE status = 'enriched' AND net_profit_usd IS NULL
+        ORDER BY timestamp DESC;
     """
     
     df = pd.read_sql(query, conn)
@@ -117,6 +117,14 @@ def main():
         
         if not col_price or not debt_price or not eth_price:
             print(f"Skipping ID {row['id']} due to missing price data.")
+            try:
+                update_conn = get_db_connection()
+                with update_conn.cursor() as cur:
+                    cur.execute("UPDATE liquidations SET net_profit_usd = 0 WHERE id = %s", (row['id'],))
+                    update_conn.commit()
+                update_conn.close()
+            except Exception:
+                pass
             continue
             
         # 2. Math Setup

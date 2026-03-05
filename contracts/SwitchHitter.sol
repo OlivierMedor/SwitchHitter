@@ -117,7 +117,8 @@ contract SwitchHitter {
                 recipient: address(this),
                 deadline: block.timestamp,
                 amountIn: seizedCollateral,
-                amountOutMinimum: 0, // Dynamic slippage needed in production
+                // [!WARNING] PHASE 1 R&D PLACEHOLDER: MUST be converted to dynamic slippage via QuoterV2 for Mainnet!
+                amountOutMinimum: 0, 
                 sqrtPriceLimitX96: 0
             });
             uniswapRouter.exactInputSingle(swapParams);
@@ -134,6 +135,7 @@ contract SwitchHitter {
                 recipient: address(this),
                 deadline: block.timestamp,
                 amountIn: amount,
+                // [!WARNING] PHASE 1 R&D PLACEHOLDER: MUST be converted to dynamic slippage via QuoterV2 for Mainnet!
                 amountOutMinimum: 0, 
                 sqrtPriceLimitX96: 0
             });
@@ -149,6 +151,7 @@ contract SwitchHitter {
                 recipient: address(this),
                 deadline: block.timestamp,
                 amountIn: amountCollateralReceived,
+                // [!WARNING] PHASE 1 R&D PLACEHOLDER: MUST be converted to dynamic slippage via QuoterV2 for Mainnet!
                 amountOutMinimum: 0, 
                 sqrtPriceLimitX96: 0
             });

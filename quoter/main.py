@@ -67,7 +67,7 @@ def get_db_connection():
         password=DB_PASSWORD, database=DB_NAME
     )
 
-def quote_swap(quoter_contract, token_in, token_out, amount_in):
+def quote_swap(quoter_contract, token_in, token_out, amount_in, block_number=None):
     """
     Try all Uniswap V3 fee tiers and return the best (highest output) quote.
     Returns (amountOut, fee_tier) or (None, None) if no pool exists.
@@ -77,13 +77,17 @@ def quote_swap(quoter_contract, token_in, token_out, amount_in):
 
     for fee in FEE_TIERS:
         try:
+            call_kwargs = {}
+            if block_number is not None:
+                call_kwargs['block_identifier'] = block_number
+                
             result = quoter_contract.functions.quoteExactInputSingle((
                 Web3.to_checksum_address(token_in),
                 Web3.to_checksum_address(token_out),
                 int(amount_in),
                 fee,
                 0  # sqrtPriceLimitX96 = 0 means no limit
-            )).call()
+            )).call(**call_kwargs)
 
             amount_out = result[0]
             if amount_out > best_out:
@@ -112,7 +116,7 @@ def main():
 
     # Fetch enriched liquidations that haven't been quoted yet
     cur.execute("""
-        SELECT id, collateral_asset, debt_asset, liquidated_collateral_amount, debt_to_cover
+        SELECT id, collateral_asset, debt_asset, liquidated_collateral_amount, debt_to_cover, block_number
         FROM liquidations
         WHERE status = 'enriched' AND quoted_slippage_bps IS NULL
         ORDER BY id ASC;
@@ -129,7 +133,7 @@ def main():
     skipped_count = 0
 
     for row in rows:
-        row_id, col_asset, debt_asset, col_amount_raw, debt_amount_raw = row
+        row_id, col_asset, debt_asset, col_amount_raw, debt_amount_raw, block_number = row
 
         # The liquidation seizes collateral. Our bot would need to SWAP that collateral
         # back to the debt token to repay the flashloan.
@@ -137,7 +141,7 @@ def main():
         amount_in = int(col_amount_raw)
 
         try:
-            quoted_out, fee_tier = quote_swap(quoter, col_asset, debt_asset, amount_in)
+            quoted_out, fee_tier = quote_swap(quoter, col_asset, debt_asset, amount_in, block_number)
 
             if quoted_out is None:
                 print(f"  ID {row_id}: No Uniswap pool found for {col_asset[:6]}→{debt_asset[:6]}, skipping")
