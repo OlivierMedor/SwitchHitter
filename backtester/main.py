@@ -15,7 +15,7 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "secretpassword")
 DB_NAME = os.getenv("DB_NAME", "switchhitter")
 
 # Constants for Profit Calculation
-AAVE_FLASH_LOAN_FEE_BPS = 9  # 0.09% Aave V3 default
+AAVE_FLASH_LOAN_FEE_BPS = 5  # 0.05% Aave V3 Default (Arbitrum)
 DEX_SLIPPAGE_BPS = 50        # 0.50% standard assumption for huge swaps
 
 # Known Arbitrum Token Decimals (Non-18)

@@ -194,13 +194,18 @@ contract SwitchHitterV2 {
         IERC20(collateralAsset).approve(aggregatorTarget, 0);
         IERC20(collateralAsset).approve(aggregatorTarget, seizedCollateral);
 
-        // 5. Execute the blind 1inch aggregator routing!
-        // We pass the raw hex calldata 1inch gave us directly to the blockchain
+        // 5. Execute the blind 1inch/Odos aggregator routing safely!
+        uint256 balanceBefore = IERC20(debtAsset).balanceOf(address(this));
+        
+        // We pass the raw hex calldata the aggregator gave us directly to the blockchain
         (bool success, ) = aggregatorTarget.call(aggregatorData);
-        require(success, "Aggregator swap failed - Slippage exceeded");
+        require(success, "Aggregator swap failed - Reverted");
 
-        // Flashloan Repayment happens automatically after this function.
-        // Whatever is left over after repaying the loan is pure profit!
+        uint256 balanceAfter = IERC20(debtAsset).balanceOf(address(this));
+        require(balanceAfter >= balanceBefore, "Aggregator swap drained balance");
+        
+        // Note: Actual flashloan repayment requires us to have `amount + premium` of debtAsset.
+        // The calling functions (receiveFlashLoan/executeOperation) enforce that final check.
     }
 
     // --- PROFIT ROUTING ---
@@ -209,8 +214,8 @@ contract SwitchHitterV2 {
         uint256 profit = IERC20(token).balanceOf(address(this));
         require(profit > 0, "No profit to route");
 
-        // Rule: 20% to cold wallet, 80% to yield vault (e.g., Aave depositing)
-        uint256 coldWalletShare = (profit * 20) / 100;
+        // Rule: 50% to cold wallet, 50% to yield vault (e.g., Aave depositing)
+        uint256 coldWalletShare = (profit * 50) / 100;
         uint256 yieldShare = profit - coldWalletShare;
 
         // 1. Send the safe baseline profit home

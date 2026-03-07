@@ -16,7 +16,9 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "secretpassword")
 DB_NAME = os.getenv("DB_NAME", "switchhitter")
 RPC_URL = os.getenv("ARBITRUM_RPC_URL")
 
-GRAPH_API_KEY = os.getenv("GRAPH_API_KEY", "99f1abcd819c8c6d716099bcd83d7481")
+GRAPH_API_KEY = os.getenv("GRAPH_API_KEY")
+if not GRAPH_API_KEY:
+    raise ValueError("Missing GRAPH_API_KEY in .env")
 SUBGRAPH_ID = "4xyasjQeREe7PxnF6wVdobZvCw5mhoHZq3T7guRpuNPf"
 SUBGRAPH_URL = f"https://gateway.thegraph.com/api/{GRAPH_API_KEY}/subgraphs/id/{SUBGRAPH_ID}"
 AAVE_V3_POOL_ADDRESS = "0x794a61358D6845594F94dc1DB02A252b5b4814aD"
