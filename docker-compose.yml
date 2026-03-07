@@ -59,7 +59,50 @@ services:
       - DB_HOST=db
       - DB_USER=switchhitter
       - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_NAME=switchhitter
+
+  quoter:
+    build:
+      context: .
+      dockerfile: quoter/Dockerfile
+    container_name: switchhitter-quoter
+    profiles: [ "analysis" ]
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_USER=switchhitter
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=switchhitter
+      - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL}
+
+  backtester:
+    build:
+      context: .
+      dockerfile: backtester/Dockerfile
+    container_name: switchhitter-backtester
+    profiles: [ "analysis" ]
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_USER=switchhitter
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=switchhitter
+
+  engine:
+    build:
+      context: engine
+      dockerfile: Dockerfile
+    container_name: switchhitter-engine
+    profiles: [ "execution" ]
+    environment:
+      - DB_HOST=db
+      - DB_USER=switchhitter
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=switchhitter
+      - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL}
 
 volumes:
   db_data:

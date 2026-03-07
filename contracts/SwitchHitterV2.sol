@@ -50,8 +50,8 @@ contract SwitchHitterV2 {
 
     constructor() {
         owner = msg.sender;
-        // Whitelist 1inch v5 Router on Arbitrum by default
-        approvedAggregators[0x1111111254eb6c44bAC0beD2854e76F90643097d] = true;
+        // Whitelist Odos V2 Router on Arbitrum by default
+        approvedAggregators[0xa062aE8A9c5e11aaA026fc2670B0D65cCc8B2858] = true;
     }
 
     // Allow owner to manage aggregators

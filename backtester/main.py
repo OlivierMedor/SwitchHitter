@@ -158,7 +158,7 @@ def main():
         print(f"ID {row['id']} | Tx: {row['tx_hash'][:10]}...")
         print(f"  Revenue:  ${gross_revenue_usd:.2f} (Collateral Seized)")
         print(f"  Debt:    -${debt_cost_usd:.2f}")
-        print(f"  FlashLn: -${flash_loan_fee_usd:.2f} (0.09%)")
+        print(f"  FlashLn: -${flash_loan_fee_usd:.2f} (0.05%)")
         print(f"  Slip:    -${slippage_cost_usd:.2f} ({effective_slippage_bps/100:.2f}%)")
         print(f"  Gas:     -${gas_cost_usd:.2f}")
         print(f"  ------------------------------")
